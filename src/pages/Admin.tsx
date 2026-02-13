@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, ArrowLeft, Search, Heart } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowLeft, Search, Heart, LogOut } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import FloatingHearts from "@/components/FloatingHearts";
 import couplePastel from "@/assets/couple-pastel.jpg";
@@ -18,8 +18,54 @@ const Admin = () => {
   const [entries, setEntries] = useState<LoveEntry[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        setIsAuthenticated(true);
+        // Check admin role
+        const { data } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", session.user.id)
+          .eq("role", "admin");
+        const hasAdmin = (data && data.length > 0);
+        setIsAdmin(hasAdmin);
+        if (hasAdmin) fetchEntries();
+      } else {
+        setIsAuthenticated(false);
+        setIsAdmin(false);
+      }
+      setAuthChecking(false);
+    });
+
+    supabase.auth.getSession();
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    setAuthLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) setAuthError(error.message);
+    setAuthLoading(false);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setEntries([]);
+  };
 
   const fetchEntries = async (search?: string) => {
     setLoading(true);
@@ -38,16 +84,81 @@ const Admin = () => {
     setLoading(false);
   };
 
-  useEffect(() => {
-    fetchEntries();
-  }, []);
-
-  const handleSearch = () => {
-    fetchEntries(searchQuery);
-  };
+  const handleSearch = () => fetchEntries(searchQuery);
 
   const entry = entries[currentIndex];
 
+  // Loading auth state
+  if (authChecking) {
+    return (
+      <div className="relative min-h-screen overflow-hidden bg-background flex items-center justify-center">
+        <FloatingHearts count={8} />
+        <Heart className="animate-pulse text-primary" size={40} />
+      </div>
+    );
+  }
+
+  // Login form
+  if (!isAuthenticated || !isAdmin) {
+    return (
+      <div className="relative min-h-screen overflow-hidden bg-background">
+        <FloatingHearts count={8} />
+        <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4">
+          <div className="card-romantic w-full max-w-sm p-8 space-y-6">
+            <div className="text-center">
+              <Heart className="text-primary mx-auto mb-3" size={32} />
+              <h1 className="font-script text-4xl text-primary glow-text mb-1">Admin</h1>
+              <p className="text-muted-foreground font-display text-sm">Sign in to view love history</p>
+            </div>
+
+            {isAuthenticated && !isAdmin && (
+              <div className="text-center text-sm text-destructive bg-destructive/10 rounded-xl p-3">
+                You don't have admin access.
+              </div>
+            )}
+
+            <form onSubmit={handleLogin} className="space-y-4">
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full px-4 py-3 rounded-xl bg-background/60 border border-border/50 text-foreground placeholder:text-muted-foreground/60 font-display text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full px-4 py-3 rounded-xl bg-background/60 border border-border/50 text-foreground placeholder:text-muted-foreground/60 font-display text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+              />
+              {authError && (
+                <p className="text-sm text-destructive text-center">{authError}</p>
+              )}
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="btn-romantic w-full text-sm font-display disabled:opacity-50"
+              >
+                {authLoading ? "Signing in..." : "Sign In"}
+              </button>
+            </form>
+
+            <button
+              onClick={() => navigate("/")}
+              className="w-full text-center text-sm text-muted-foreground/60 hover:text-primary transition-colors font-display"
+            >
+              ← Back to Calculator
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Admin dashboard
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
       <FloatingHearts count={8} />
@@ -55,16 +166,25 @@ const Admin = () => {
       <div className="relative z-10 flex flex-col items-center min-h-screen px-4 py-12">
         <div className="w-full max-w-lg">
           {/* Header */}
-          <div className="flex items-center gap-4 mb-8">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate("/")}
+                className="p-2 rounded-full hover:bg-muted transition-all text-primary"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <h1 className="font-script text-4xl text-primary glow-text">
+                Love History
+              </h1>
+            </div>
             <button
-              onClick={() => navigate("/")}
-              className="p-2 rounded-full hover:bg-muted transition-all text-primary"
+              onClick={handleLogout}
+              className="p-2 rounded-full hover:bg-muted transition-all text-muted-foreground hover:text-primary"
+              title="Sign out"
             >
-              <ArrowLeft size={20} />
+              <LogOut size={20} />
             </button>
-            <h1 className="font-script text-4xl text-primary glow-text">
-              Love History
-            </h1>
           </div>
 
           {/* Search */}
@@ -100,13 +220,9 @@ const Admin = () => {
               <p className="text-muted-foreground font-display text-lg">
                 No love calculations yet
               </p>
-              <p className="text-muted-foreground/60 text-sm mt-2">
-                Go calculate some love first!
-              </p>
             </div>
           ) : entry ? (
             <div className="card-romantic p-8 space-y-6 animate-fade-in" key={entry.id}>
-              {/* Photo */}
               <div className="romantic-frame w-48 h-48 mx-auto">
                 <img
                   src={entry.image_url || couplePastel}
@@ -115,7 +231,6 @@ const Admin = () => {
                 />
               </div>
 
-              {/* Names & Score */}
               <div className="text-center space-y-2">
                 <h2 className="font-display text-xl text-foreground">
                   {entry.name1} <span className="font-script text-2xl text-primary mx-2">&</span> {entry.name2}
@@ -125,12 +240,10 @@ const Admin = () => {
                 </p>
               </div>
 
-              {/* Date */}
               <p className="text-center text-sm text-muted-foreground">
                 {new Date(entry.created_at).toLocaleString()}
               </p>
 
-              {/* Navigation */}
               <div className="flex items-center justify-between pt-4">
                 <button
                   onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}

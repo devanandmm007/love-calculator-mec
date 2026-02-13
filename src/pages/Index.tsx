@@ -187,13 +187,6 @@ const Index = () => {
           </button>
         </div>
 
-        <a
-          href="/admin"
-          className="mt-8 text-sm text-muted-foreground/60 hover:text-primary transition-colors font-display animate-fade-in"
-          style={{ animationDelay: "0.4s" }}
-        >
-          View All Calculations →
-        </a>
       </div>
     </div>
   );
